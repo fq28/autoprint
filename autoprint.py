@@ -4,9 +4,12 @@ import win32print
 import win32api
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
+from collections import deque
 
 # Folder to monitor (can be adjusted as per need)
 WATCHED_FOLDER = 'E:\\Picture'
+PRINT_QUEUE = deque()
+PRINTING = False
 
 class OnMyWatch:
     # Set the directory
@@ -15,15 +18,15 @@ class OnMyWatch:
     # Define event handler
     class Handler(FileSystemEventHandler):
         @staticmethod
-        def on_created(event):
-            if '.pdf' in event.src_path and os.path.exists(event.src_path):  # Check if a pdf file and if it still exists
-                print(f"Received file: {event.src_path}. Waiting for file to settle...")
-                time.sleep(1)  # wait for 5 seconds or adjust as necessary
-                print(f"Now printing {event.src_path}...")
-                print_file(event.src_path)
-                print(f"Finished printing {event.src_path}. Deleting now...")
-                time.sleep(5)  # Give some time to finish printing (can be adjusted as per need)
-                os.remove(event.src_path)
+        def on_moved(event):
+            file = event.src_path.removesuffix(".crdownload")
+
+            # Windows1 10:if '.pdf' in event.src_path and os.path.exists(event.src_path):  # Check if a pdf file and if it still exists
+            if '.pdf' in event.src_path:
+                print(f"Received file: {file}. Adding to print queue...")
+                PRINT_QUEUE.append(file)
+                process_queue()
+
 
     def __init__(self):
         self.observer = Observer()
@@ -40,6 +43,29 @@ class OnMyWatch:
             print("Observer stopped.")
         self.observer.join()
 
+def process_queue():
+    global PRINTING, PRINT_QUEUE
+    if PRINTING:
+        return  # Return if a print job is already in progress
+
+    if PRINT_QUEUE:
+        PRINTING = True
+        file_path = PRINT_QUEUE.popleft()  # Fetch the next file from the queue
+        
+        print(f"Waiting for file {file_path} to settle...")
+        time.sleep(1)
+        
+        print(f"Now printing {file_path}...")
+        print_file(file_path)
+        
+        print(f"Finished printing {file_path}. Deleting now...")
+        time.sleep(5)
+        os.remove(file_path)
+        
+        PRINTING = False
+        process_queue()  # Check the queue again
+
+
 def print_file(file_path):
     """
     Print the file using default printer.
@@ -53,6 +79,8 @@ def print_file(file_path):
         ".",
         0
     )
+    process_queue()
+
 
 if __name__ == '__main__':
     watch = OnMyWatch()
