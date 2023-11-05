@@ -6,34 +6,40 @@ from watchdog.events import FileSystemEventHandler
 import threading
 from subprocess import call
 
-# Folder to monitor
-WATCHED_FOLDER = 'E:\\Picture'
+# Folder to monitor (can be adjusted as per need)
+WATCHED_FOLDER = "C:\\FolderMill Data\\Hot Folders\\1\\Incoming"
 
 # program that will be used for printing
-SUMATRA_DIR = "C:\\Users\\fqdej\\AppData\\Local\\SumatraPDF\\SumatraPDF.exe" 
+SUMATRA_DIR = "C:\\Users\\Magazijn Cookinglife\\AppData\\Local\\SumatraPDF\\SumatraPDF.exe" 
 
 # Mapping of filename prefixes to printer names
 PRINTER_MAPPING = {
-    'PACKINGSLIP': 'ET-7700 Series(Network)',  # Replace with actual printer name
-    'DEFAULT': 'ZDesigner GK420d'  # Default printer for labels
+    'PACKINGSLIP': 'Hewlett-Packard HP LaserJet M3035 MFP (Kopie 1)',  # Replace with actual printer name
+    'DEFAULT': 'ZDesigner GK420d (Kopie 1)'  # Default printer for labels
 }
 
 class OnMyWatch:
+    # Set the directory
     WATCHED_FOLDER = WATCHED_FOLDER
 
+    # Define event handler
     class Handler(FileSystemEventHandler):
         @staticmethod
-        def on_created(event):
-            file = event.src_path.removesuffix(".crdownload")
+        def on_moved(event):
+            try:
+                # Windows 11
+                file = event.src_path.removesuffix('.crdownload')
+                # check if the file is a pdf
+                if '.pdf' in file and os.path.exists(file):
+                    print(f"Received file: {file}. Starting print thread...")
+                    threading.Thread(target=process_file, args=(file,)).start()
 
-            # check if the file is a pdf
-            if '.pdf' in file and os.path.exists(file):
-                print(f"Received file: {file}. Starting print thread...")
-                threading.Thread(target=process_file, args=(file,)).start()
+            except Exception as exception:
+                print("Error: ", exception)
 
     def __init__(self):
         self.observer = Observer()
-    
+
     def run(self):
         event_handler = OnMyWatch.Handler()
         self.observer.schedule(event_handler, self.WATCHED_FOLDER, recursive=False)
@@ -83,7 +89,7 @@ def print_file(file_path, printer_name):
     Print the file using the specified printer.
     """
     if printer_does_exists(printer_name):
-        call([SUMATRA_DIR, "-print-to", printer_name, "-silent", file_path])
+        call([SUMATRA_DIR, "-print-to", printer_name, "-silent", "-print-settings", "portrait", file_path])
 
 if __name__ == '__main__':
     watch = OnMyWatch()
