@@ -7,10 +7,12 @@ import threading
 from subprocess import call
 
 # Folder to monitor (can be adjusted as per need)
-WATCHED_FOLDER = "C:\\FolderMill Data\\Hot Folders\\1\\Incoming"
+WATCHED_FOLDER = "C:\\Users\\Magazijn Cookinglife\\Downloads"
 
 # program that will be used for printing
 SUMATRA_DIR = "C:\\Users\\Magazijn Cookinglife\\AppData\\Local\\SumatraPDF\\SumatraPDF.exe" 
+ACRO_DIR = "C:\Program Files\Adobe\Acrobat DC\Acrobat\Acrobat.exe"
+
 
 # Mapping of filename prefixes to printer names
 PRINTER_MAPPING = {
@@ -89,7 +91,8 @@ def print_file(file_path, printer_name):
     Print the file using the specified printer.
     """
     if printer_does_exists(printer_name):
-        call([SUMATRA_DIR, "-print-to", printer_name, "-silent", "-print-settings", "portrait", file_path])
+        #call([SUMATRA_DIR, "-print-to", printer_name, "-silent", "-print-settings", "portrait", file_path])
+    	call([ACRO_DIR, "/s", "/h", "/p", file_path])
 
 if __name__ == '__main__':
     watch = OnMyWatch()
