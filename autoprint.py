@@ -1,5 +1,6 @@
 import os
 import time
+import re
 import win32print
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
@@ -7,18 +8,45 @@ import threading
 from subprocess import call
 
 # Folder to monitor (can be adjusted as per need)
-WATCHED_FOLDER = "C:\\Users\\Magazijn Cookinglife\\Downloads"
+WATCHED_FOLDER = "C:\\Users\\fqdej\\Downloads"
 
 # program that will be used for printing
 SUMATRA_DIR = "C:\\Users\\Magazijn Cookinglife\\AppData\\Local\\SumatraPDF\\SumatraPDF.exe" 
-ACRO_DIR = "C:\Program Files\Adobe\Acrobat DC\Acrobat\Acrobat.exe"
+ACRO_DIR = "C:\\Program Files\\Adobe\\Acrobat DC\\Acrobat\\Acrobat.exe"
 
 
 # Mapping of filename prefixes to printer names
 PRINTER_MAPPING = {
     'PACKINGSLIP': 'Hewlett-Packard HP LaserJet M3035 MFP (Kopie 1)',  # Replace with actual printer name
-    'DEFAULT': 'ZDesigner GK420d (Kopie 1)'  # Default printer for labels
+    'DEFAULT': 'ZDesigner GK420d'  # Default printer for labels
 }
+
+def rename_file(file_path):
+
+     # Define the pattern to find the unwanted part and the .part extension
+    pattern_with_parenthesis = r"(\(.*?\))\.[a-zA-Z0-9]+\.pdf\.part$"
+    pattern_without_parenthesis = r"\.[a-zA-Z0-9]+\.pdf\.part$"
+    
+    # Get the directory and filename
+    dir_name, file_name = os.path.split(file_path)
+    
+    # Try to match the pattern with parenthesis first
+    match_with_parenthesis = re.search(pattern_with_parenthesis, file_name)
+    match_without_parenthesis = re.search(pattern_without_parenthesis, file_name)
+    
+    if match_with_parenthesis:
+        # Construct the new filename
+        new_file_name = file_name[:match_with_parenthesis.start()] + match_with_parenthesis.group(1) + '.pdf'
+        
+    elif match_without_parenthesis:
+        # Construct the new filename without parenthesis
+        new_file_name = file_name[:match_without_parenthesis.start()] + '.pdf'
+        
+    else:
+        print(f"No match found for the file '{file_name}'")
+        return  ""# Exit the function if no match is found
+
+    return os.path.join(dir_name, new_file_name)
 
 class OnMyWatch:
     # Set the directory
@@ -30,7 +58,7 @@ class OnMyWatch:
         def on_moved(event):
             try:
                 # Windows 11
-                file = event.src_path.removesuffix('.crdownload')
+                file = rename_file(event.src_path)
                 # check if the file is a pdf
                 if '.pdf' in file and os.path.exists(file):
                     print(f"Received file: {file}. Starting print thread...")
