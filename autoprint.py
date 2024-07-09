@@ -59,10 +59,19 @@ class OnMyWatch:
             try:
                 # Windows 11
                 file = rename_file(event.src_path)
+
+                other_file = event.src_path.removesuffix('.crdownload')
+
                 # check if the file is a pdf
                 if '.pdf' in file and os.path.exists(file):
                     print(f"Received file: {file}. Starting print thread...")
                     threading.Thread(target=process_file, args=(file,)).start()
+                    return
+            
+                # check if the file is a pdf
+                if '.pdf' in other_file and os.path.exists(other_file):
+                    print(f"Received file: {other_file}. Starting print thread...")
+                    threading.Thread(target=process_file, args=(other_file,)).start()
 
             except Exception as exception:
                 print("Error: ", exception)
