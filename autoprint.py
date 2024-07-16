@@ -1,86 +1,124 @@
 import os
 import time
 import re
-import win32print
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 import threading
 from subprocess import call
+import pygetwindow as gw
+from tkinter import Tk, Label, StringVar, Frame, BOTH
+from tkinter import Canvas
+import signal
+import sys
 
-# Folder to monitor (can be adjusted as per need)
-WATCHED_FOLDER = "C:\\Users\\fqdej\\Downloads"
+# Automatically find the Downloads folder
+DOWNLOADS_FOLDER = os.path.join(os.path.expanduser("~"), "Downloads")
 
-# program that will be used for printing
-SUMATRA_DIR = "C:\\Users\\Magazijn Cookinglife\\AppData\\Local\\SumatraPDF\\SumatraPDF.exe" 
+# Program that will be used for printing
 ACRO_DIR = "C:\\Program Files\\Adobe\\Acrobat DC\\Acrobat\\Acrobat.exe"
 
+def signal_handler(sig, frame):
+    print("Exiting gracefully...")
+    app.update_status("Exiting gracefully...")
+    watch.stop()
+    root.destroy()
+    sys.exit(0)
 
-# Mapping of filename prefixes to printer names
-PRINTER_MAPPING = {
-    'PACKINGSLIP': 'Hewlett-Packard HP LaserJet M3035 MFP (Kopie 1)',  # Replace with actual printer name
-    'DEFAULT': 'ZDesigner GK420d'  # Default printer for labels
-}
+signal.signal(signal.SIGINT, signal_handler)
 
+# Tkinter UI
+class App:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Auto Print")
+
+        # Frame for the monitoring status and green orb
+        top_frame = Frame(root)
+        top_frame.pack(fill=BOTH, expand=True)
+
+        self.monitoring_status = StringVar()
+        self.monitoring_status.set("Monitoring folder: " + DOWNLOADS_FOLDER)
+        
+        self.canvas = Canvas(top_frame, width=20, height=20)
+        self.canvas.create_oval(5, 5, 15, 15, fill="green")
+        self.canvas.pack(side="left", padx=10, pady=10)
+        
+        self.monitoring_label = Label(top_frame, textvariable=self.monitoring_status, relief="sunken", anchor="w")
+        self.monitoring_label.pack(side="left", fill=BOTH, expand=True)
+
+        # Frame for the log status
+        bottom_frame = Frame(root)
+        bottom_frame.pack(fill=BOTH, expand=True)
+        
+        self.log_status = StringVar()
+        self.log_status.set("")
+
+        self.log_label = Label(bottom_frame, textvariable=self.log_status, relief="sunken", anchor="w")
+        self.log_label.pack(side="bottom", fill=BOTH)
+        
+        root.protocol("WM_DELETE_WINDOW", self.on_closing)
+    
+    def update_monitoring_status(self, message):
+        self.monitoring_status.set(message)
+        self.root.update_idletasks()
+
+    def update_log_status(self, message):
+        self.log_status.set(message)
+        self.root.update_idletasks()
+
+    def on_closing(self):
+        watch.stop()
+        self.root.destroy()
+
+# Function to rename file
 def rename_file(file_path):
-
-     # Define the pattern to find the unwanted part and the .part extension
     pattern_with_parenthesis = r"(\(.*?\))\.[a-zA-Z0-9]+\.pdf\.part$"
     pattern_without_parenthesis = r"\.[a-zA-Z0-9]+\.pdf\.part$"
-    
-    # Get the directory and filename
     dir_name, file_name = os.path.split(file_path)
-    
-    # Try to match the pattern with parenthesis first
     match_with_parenthesis = re.search(pattern_with_parenthesis, file_name)
     match_without_parenthesis = re.search(pattern_without_parenthesis, file_name)
-    
     if match_with_parenthesis:
-        # Construct the new filename
         new_file_name = file_name[:match_with_parenthesis.start()] + match_with_parenthesis.group(1) + '.pdf'
-        
     elif match_without_parenthesis:
-        # Construct the new filename without parenthesis
         new_file_name = file_name[:match_without_parenthesis.start()] + '.pdf'
-        
     else:
-        print(f"No match found for the file '{file_name}'")
-        return  ""# Exit the function if no match is found
-
+        return ""
     return os.path.join(dir_name, new_file_name)
 
-class OnMyWatch:
-    # Set the directory
-    WATCHED_FOLDER = WATCHED_FOLDER
-
-    # Define event handler
-    class Handler(FileSystemEventHandler):
-        @staticmethod
-        def on_moved(event):
-            try:
-                # Windows 11
-                file = rename_file(event.src_path)
-
-                other_file = event.src_path.removesuffix('.crdownload')
-
-                # check if the file is a pdf
-                if '.pdf' in file and os.path.exists(file):
-                    print(f"Received file: {file}. Starting print thread...")
-                    threading.Thread(target=process_file, args=(file,)).start()
-                    return
+# Watchdog event handler
+class Handler(FileSystemEventHandler):
+    @staticmethod
+    def on_moved(event):
+        try:
+            # firefox
+            file = rename_file(event.src_path)
             
-                # check if the file is a pdf
-                if '.pdf' in other_file and os.path.exists(other_file):
-                    print(f"Received file: {other_file}. Starting print thread...")
-                    threading.Thread(target=process_file, args=(other_file,)).start()
+            if '.pdf' in file and os.path.exists(file):
+                print(f"Received file: {file}. Starting print thread...")
+                app.update_log_status(f"Received file: {file}. Starting print thread...")
+                threading.Thread(target=process_file, args=(file,)).start()
+                return
 
-            except Exception as exception:
-                print("Error: ", exception)
+            # chrome 
+            other_file = event.src_path.removesuffix('.crdownload')
+
+            if '.pdf' in other_file and os.path.exists(other_file):
+                print(f"Received file: {other_file}. Starting print thread...")
+                app.update_log_status(f"Received file: {other_file}. Starting print thread...")
+                threading.Thread(target=process_file, args=(other_file,)).start()
+        
+        except Exception as exception:
+            print("Error: ", exception)
+            app.update_log_status(f"Error: {exception}")
+
+class OnMyWatch:
+    WATCHED_FOLDER = DOWNLOADS_FOLDER
 
     def __init__(self):
         self.observer = Observer()
 
     def run(self):
-        event_handler = OnMyWatch.Handler()
+        event_handler = Handler()
         self.observer.schedule(event_handler, self.WATCHED_FOLDER, recursive=False)
         self.observer.start()
         try:
@@ -90,47 +128,49 @@ class OnMyWatch:
             self.observer.stop()
             print("Observer stopped.")
         self.observer.join()
+    
+    def stop(self):
+        self.observer.stop()
+        self.observer.join()
 
+# Process file function
 def process_file(file_path):
     try:
         time.sleep(1)  # Wait for file to be completely written
 
-        filename = os.path.basename(file_path)
-        printer_name = PRINTER_MAPPING['DEFAULT']
-        for prefix, printer in PRINTER_MAPPING.items():
-            if filename.startswith(prefix):
-                printer_name = printer
-                break
-        
-        print(f"Now printing {file_path} on printer {printer_name}...")
-        print_file(file_path, printer_name)
+        active_window = gw.getActiveWindow()
 
-        time.sleep(5)  # Give some time to finish printing
+        print_file(file_path)
+
+        time.sleep(0.5)
+
+        if active_window:
+            try:
+                active_window.activate()
+            except Exception as e:
+                error_message = str(e)
+                if "Error code from Windows: 0" not in error_message:
+                    print("Error while refocusing the window:", e)
+        else:
+            print("No active window found.")
+
+        time.sleep(4.5)  # Give some time to finish printing
         os.remove(file_path)
         print(f"Deleted {file_path}. ")
+        app.update_log_status(f"Deleted {file_path}.")
 
     except Exception as e:
-        print("Eror while printing:", e)
+        print("Error while printing:", e)
+        app.update_log_status(f"Error while printing: {e}")
 
-
-def printer_does_exists(printer_name):
-    # Get the list of all installed printers
-    printers = [printer[2] for printer in win32print.EnumPrinters(win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS)]
-
-    # Check if the specified printer is in the list of installed printers
-    if printer_name not in printers:
-        print(f"Error: Printer '{printer_name}' not found. Available printers are: {printers}")
-        return False
-    return True
-
-def print_file(file_path, printer_name):
-    """
-    Print the file using the specified printer.
-    """
-    if printer_does_exists(printer_name):
-        #call([SUMATRA_DIR, "-print-to", printer_name, "-silent", "-print-settings", "portrait", file_path])
-    	call([ACRO_DIR, "/s", "/h", "/p", file_path])
+# Print file function
+def print_file(file_path):
+    print(f"Now printing {file_path}...")
+    call([ACRO_DIR, "/s", "/h", "/p", file_path])
 
 if __name__ == '__main__':
+    root = Tk()
+    app = App(root)
     watch = OnMyWatch()
-    watch.run()
+    threading.Thread(target=watch.run).start()
+    root.mainloop()
