@@ -1,0 +1,6 @@
+pygetwindow
+watchdog
+pywin32
+pystray 
+Pillow
+winshell
