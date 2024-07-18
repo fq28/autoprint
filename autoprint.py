@@ -15,22 +15,70 @@ import pystray
 from PIL import Image, ImageDraw
 import winshell
 from win32com.client import Dispatch
-
+import fitz  # PyMuPDF
+from PIL import Image, ImageWin
+import win32print
+import win32ui
+import win32con
+import os
 
 # Automatically find the Downloads folder
 DOWNLOADS_FOLDER = os.path.join(os.path.expanduser("~"), "Downloads")
 
-def find_acrobat():
-    possible_paths = [
-        "C:\\Program Files\\Adobe\\Acrobat DC\\Acrobat\\Acrobat.exe",
-        "C:\\Program Files (x86)\\Adobe\\Acrobat DC\\Acrobat\\Acrobat.exe",
-        "C:\\Program Files\\Adobe\\Acrobat Reader DC\\Reader\\Acrobat.exe",
-        "C:\\Program Files (x86)\\Adobe\\Acrobat Reader DC\\Reader\\Acrobat.exe"
-    ]
-    for path in possible_paths:
-        if os.path.exists(path):
-            return path
-    return None
+def print_image(image_path):
+    # Open image
+    image = Image.open(image_path)
+    # Convert image to RGB mode if it is not
+    if image.mode != "RGB":
+        image = image.convert("RGB")
+
+    # Get the default printer
+    printer_name = win32print.GetDefaultPrinter()
+
+    # Start a print job
+    hdc = win32ui.CreateDC()
+    hdc.CreatePrinterDC(printer_name)
+    hdc.StartDoc(image_path)
+    hdc.StartPage()
+
+    # Get printable area dimensions
+    printable_area = hdc.GetDeviceCaps(win32con.PHYSICALWIDTH), hdc.GetDeviceCaps(win32con.PHYSICALHEIGHT)
+    printer_size = hdc.GetDeviceCaps(win32con.HORZRES), hdc.GetDeviceCaps(win32con.VERTRES)
+
+    # Calculate the scaling factor to fit the image within the printable area
+    scale = min(printable_area[0] / image.width, printable_area[1] / image.height)
+    new_size = (int(image.width * scale), int(image.height * scale))
+
+    # Resize the image
+    image = image.resize(new_size, Image.Resampling.LANCZOS)
+
+    # Create a device context from the printer
+    dib = ImageWin.Dib(image)
+
+    # Calculate position to center the image on the page
+    x0 = (printer_size[0] - new_size[0]) // 2
+    y0 = (printer_size[1] - new_size[1]) // 2
+    x1 = x0 + new_size[0]
+    y1 = y0 + new_size[1]
+
+    # Draw the image on the printer
+    dib.draw(hdc.GetHandleOutput(), (x0, y0, x1, y1))
+
+    # End the print job
+    hdc.EndPage()
+    hdc.EndDoc()
+    hdc.DeleteDC()
+
+def convert_and_print_pdf(file_path):
+    doc = fitz.open(file_path)
+    for page_num in range(len(doc)):
+        page = doc.load_page(page_num)
+        pix = page.get_pixmap(dpi=300)  # Use 300 DPI for high quality
+        output = f"page_{page_num}.png"
+        pix.save(output)
+        print_image(output)
+        os.remove(output)  # Remove the image after printing
+    doc.close()
 
 def create_image():
     # Generate an image with a green circle indicating active monitoring
@@ -66,7 +114,7 @@ def setup_tray():
 
 def signal_handler(sig, frame):
     print("Exiting gracefully...")
-    #app.update_status("Exiting gracefully...")
+    app.update_status("Exiting gracefully...")
     watch.stop()
     root.destroy()
     sys.exit(0)
@@ -83,14 +131,6 @@ def create_startup_shortcut():
     shortcut.Targetpath = script_path
     shortcut.WorkingDirectory = os.path.dirname(script_path)
     shortcut.save()
-
-def minimize_adobe_acrobat():
-    try:
-        acrobat_windows = gw.getWindowsWithTitle('Adobe Acrobat')
-        for window in acrobat_windows:
-            window.minimize()
-    except Exception as e:
-        print(f"Error minimizing Adobe Acrobat: {e}")
 
 # Tkinter UI
 class App:
@@ -207,7 +247,6 @@ class OnMyWatch:
 # Process file function
 def process_file(file_path):
     try:
-        minimize_adobe_acrobat()
         time.sleep(1)  # Wait for file to be completely written
 
         active_window = gw.getActiveWindow()
@@ -226,24 +265,21 @@ def process_file(file_path):
         else:
             print("No active window found.")
 
-        time.sleep(3.5)  # Give some time to finish printing
+        time.sleep(4.5)  # Give some time to finish printing
         os.remove(file_path)
         print(f"Deleted {file_path}. ")
+        #app.update_log_status(f"Deleted {file_path}.")
 
     except Exception as e:
         print("Error while printing:", e)
+        #app.update_log_status(f"Error while printing: {e}")
 
 # Print file function
 def print_file(file_path):
     print(f"Now printing {file_path}...")
-    call([ACRO_DIR, "/s", "/h", "/p", file_path])
+    convert_and_print_pdf(file_path)
 
 if __name__ == '__main__':
-    ACRO_DIR = find_acrobat()
-    if not ACRO_DIR:
-        messagebox.showerror("Error", "Adobe Acrobat not found on the system. Please ensure it is installed.")
-        sys.exit(1)
-
     # Create startup shortcut
     create_startup_shortcut()
 
