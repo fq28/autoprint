@@ -66,7 +66,7 @@ def setup_tray():
 
 def signal_handler(sig, frame):
     print("Exiting gracefully...")
-    app.update_status("Exiting gracefully...")
+    #app.update_status("Exiting gracefully...")
     watch.stop()
     root.destroy()
     sys.exit(0)
@@ -83,6 +83,14 @@ def create_startup_shortcut():
     shortcut.Targetpath = script_path
     shortcut.WorkingDirectory = os.path.dirname(script_path)
     shortcut.save()
+
+def minimize_adobe_acrobat():
+    try:
+        acrobat_windows = gw.getWindowsWithTitle('Adobe Acrobat')
+        for window in acrobat_windows:
+            window.minimize()
+    except Exception as e:
+        print(f"Error minimizing Adobe Acrobat: {e}")
 
 # Tkinter UI
 class App:
@@ -199,6 +207,7 @@ class OnMyWatch:
 # Process file function
 def process_file(file_path):
     try:
+        minimize_adobe_acrobat()
         time.sleep(1)  # Wait for file to be completely written
 
         active_window = gw.getActiveWindow()
@@ -217,14 +226,12 @@ def process_file(file_path):
         else:
             print("No active window found.")
 
-        time.sleep(4.5)  # Give some time to finish printing
+        time.sleep(3.5)  # Give some time to finish printing
         os.remove(file_path)
         print(f"Deleted {file_path}. ")
-        #app.update_log_status(f"Deleted {file_path}.")
 
     except Exception as e:
         print("Error while printing:", e)
-        #app.update_log_status(f"Error while printing: {e}")
 
 # Print file function
 def print_file(file_path):
