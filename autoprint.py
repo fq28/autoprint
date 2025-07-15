@@ -205,7 +205,7 @@ def rename_file(file_path):
 # Watchdog event handler
 class Handler(FileSystemEventHandler):
     @staticmethod
-    def on_moved(event):
+    def on_modified(event):
         try:
             # firefox
             file = rename_file(event.src_path)
