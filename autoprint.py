@@ -21,6 +21,7 @@ import win32print
 import win32ui
 import win32con
 import os
+import hashlib
 
 # Automatically find the Downloads folder
 DOWNLOADS_FOLDER = os.path.join(os.path.expanduser("~"), "Downloads")
@@ -202,27 +203,42 @@ def rename_file(file_path):
         return ""
     return os.path.join(dir_name, new_file_name)
 
+def checksum(path, chunk_size=8192):
+    h = hashlib.md5()
+    with open(path, 'rb') as f:
+        while chunk := f.read(chunk_size):
+            h.update(chunk)
+    return h.hexdigest()
+
 # Watchdog event handler
 class Handler(FileSystemEventHandler):
-    @staticmethod
-    def on_modified(event):
+    last_checksum = None
+
+    @classmethod
+    def _process(cls, path):
+        cs = checksum(path)
+        print(cs)
+        if cs == cls.last_checksum:
+            return
+        cls.last_checksum = cs
+        print(f"Received file: {path}. Starting print thread...")
+        threading.Thread(target=process_file, args=(path,)).start()
+
+    def on_modified(self, event):
         try:
             # firefox
             file = rename_file(event.src_path)
             
             if '.pdf' in file and os.path.exists(file):
-                print(f"Received file: {file}. Starting print thread...")
-                #app.update_log_status(f"Received file: {file}. Starting print thread...")
-                threading.Thread(target=process_file, args=(file,)).start()
+                self._process(file)
                 return
 
             # chrome 
             other_file = event.src_path.removesuffix('.crdownload')
 
             if '.pdf' in other_file and os.path.exists(other_file):
-                print(f"Received file: {other_file}. Starting print thread...")
-                #app.update_log_status(f"Received file: {other_file}. Starting print thread...")
-                threading.Thread(target=process_file, args=(other_file,)).start()
+                self._process(other_file)
+
         
         except Exception as exception:
             print("Error: ", exception)
